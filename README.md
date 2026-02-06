@@ -791,7 +791,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Built with ❤️ using Flutter**
+**Made with ❤️ HCL Healthcare Product Team**
 
 **Version**: 0.5.0
 **Last Updated**: January 12, 2026
