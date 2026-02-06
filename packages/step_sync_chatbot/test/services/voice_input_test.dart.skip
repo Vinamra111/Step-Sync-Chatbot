@@ -1,0 +1,771 @@
+/// Tests for Voice Input Service
+///
+/// Validates:
+/// - Service initialization
+/// - Permission handling
+/// - Speech recognition lifecycle
+/// - State management
+/// - Result streaming
+/// - Audio level monitoring
+/// - Error handling
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:step_sync_chatbot/src/services/voice_input_service.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:logger/logger.dart';
+
+// Mock classes
+class MockSpeechToText extends Mock implements stt.SpeechToText {}
+class MockLogger extends Mock implements Logger {}
+
+void main() {
+  late MockSpeechToText mockSpeech;
+  late MockLogger mockLogger;
+  late VoiceInputService service;
+
+  setUp(() {
+    mockSpeech = MockSpeechToText();
+    mockLogger = MockLogger();
+
+    // Default mock behaviors
+    when(() => mockLogger.d(any())).thenReturn(null);
+    when(() => mockLogger.i(any())).thenReturn(null);
+    when(() => mockLogger.w(any())).thenReturn(null);
+    when(() => mockLogger.e(any(), error: any(named: 'error'), stackTrace: any(named: 'stackTrace')))
+        .thenReturn(null);
+  });
+
+  group('VoiceInputService - Initialization', () {
+    test('should start in idle state', () {
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      expect(service.state, equals(VoiceInputState.idle));
+      expect(service.isAvailable, isFalse);
+      expect(service.isListening, isFalse);
+    });
+
+    test('should initialize successfully when permissions granted', () async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      final result = await service.initialize();
+
+      expect(result, isTrue);
+      expect(service.state, equals(VoiceInputState.ready));
+      expect(service.isAvailable, isTrue);
+    });
+
+    test('should fail initialization when speech not available', () async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => false);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      final result = await service.initialize();
+
+      expect(result, isFalse);
+      expect(service.state, equals(VoiceInputState.notAvailable));
+      expect(service.isAvailable, isFalse);
+    });
+
+    test('should handle initialization errors gracefully', () async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenThrow(Exception('Platform error'));
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      final result = await service.initialize();
+
+      expect(result, isFalse);
+      expect(service.state, equals(VoiceInputState.error));
+    });
+
+    test('should load available locales on successful init', () async {
+      final mockLocales = [
+        stt.LocaleName('en-US', 'English (US)'),
+        stt.LocaleName('es-ES', 'Spanish (Spain)'),
+      ];
+
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => mockLocales);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+
+      expect(service.availableLocales.length, equals(2));
+      expect(service.availableLocales[0].localeId, equals('en-US'));
+    });
+  });
+
+  group('VoiceInputService - Listening', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should start listening successfully', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+
+      await service.startListening();
+
+      expect(service.state, equals(VoiceInputState.listening));
+      expect(service.isListening, isTrue);
+      verify(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).called(1);
+    });
+
+    test('should throw exception when starting without initialization', () async {
+      final uninitializedService = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      expect(
+        () => uninitializedService.startListening(),
+        throwsA(isA<VoiceInputException>()),
+      );
+    });
+
+    test('should not start listening when already listening', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+
+      await service.startListening();
+      await service.startListening(); // Second call
+
+      // Should only call listen once
+      verify(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).called(1);
+    });
+
+    test('should stop listening successfully', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+      when(() => mockSpeech.stop()).thenAnswer((_) async => true);
+
+      await service.startListening();
+      await service.stopListening();
+
+      expect(service.state, equals(VoiceInputState.ready));
+      expect(service.isListening, isFalse);
+      verify(() => mockSpeech.stop()).called(1);
+    });
+
+    test('should cancel listening successfully', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+      when(() => mockSpeech.cancel()).thenAnswer((_) async {});
+
+      await service.startListening();
+      await service.cancel();
+
+      expect(service.state, equals(VoiceInputState.ready));
+      verify(() => mockSpeech.cancel()).called(1);
+    });
+
+    test('should not stop when not listening', () async {
+      when(() => mockSpeech.stop()).thenAnswer((_) async => true);
+
+      await service.stopListening();
+
+      verifyNever(() => mockSpeech.stop());
+    });
+  });
+
+  group('VoiceInputService - State Streaming', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should emit state changes through stream', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+      when(() => mockSpeech.stop()).thenAnswer((_) async => true);
+
+      final states = <VoiceInputState>[];
+      final subscription = service.stateStream.listen(states.add);
+
+      await service.startListening();
+      await service.stopListening();
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(states, contains(VoiceInputState.listening));
+      expect(states, contains(VoiceInputState.ready));
+
+      await subscription.cancel();
+    });
+
+    test('should not emit duplicate state changes', () async {
+      final states = <VoiceInputState>[];
+      final subscription = service.stateStream.listen(states.add);
+
+      // Try to trigger same state multiple times
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+
+      await service.startListening();
+      await service.startListening(); // Should not emit duplicate
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Filter to listening states
+      final listeningStates = states.where((s) => s == VoiceInputState.listening).toList();
+      expect(listeningStates.length, equals(1));
+
+      await subscription.cancel();
+    });
+  });
+
+  group('VoiceInputService - Result Streaming', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should emit transcription results', () async {
+      final results = <VoiceInputResult>[];
+      final subscription = service.resultStream.listen(results.add);
+
+      stt.ResultHandler? onResult;
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((invocation) async {
+        onResult = invocation.namedArguments[#onResult] as stt.ResultHandler;
+      });
+
+      await service.startListening();
+
+      // Simulate speech result
+      final mockResult = stt.SpeechRecognitionResult(
+        ['Hello world'],
+        true,
+        null,
+        0,
+        0.95,
+        false,
+        false,
+      );
+      onResult?.call(mockResult);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(results.length, equals(1));
+      expect(results[0].transcription, equals('Hello world'));
+      expect(results[0].confidence, equals(0.95));
+      expect(results[0].isFinal, isTrue);
+
+      await subscription.cancel();
+    });
+
+    test('should filter low confidence results', () async {
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+        config: const VoiceInputConfig(minConfidence: 0.8),
+      );
+
+      await service.initialize();
+
+      final results = <VoiceInputResult>[];
+      final subscription = service.resultStream.listen(results.add);
+
+      stt.ResultHandler? onResult;
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((invocation) async {
+        onResult = invocation.namedArguments[#onResult] as stt.ResultHandler;
+      });
+
+      await service.startListening();
+
+      // Low confidence result (should be filtered)
+      final lowConfResult = stt.SpeechRecognitionResult(
+        ['Test'],
+        false,
+        null,
+        0,
+        0.5, // Below threshold
+        false,
+        false,
+      );
+      onResult?.call(lowConfResult);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(results.length, equals(0));
+
+      await subscription.cancel();
+    });
+
+    test('should always emit final results regardless of confidence', () async {
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+        config: const VoiceInputConfig(minConfidence: 0.9),
+      );
+
+      await service.initialize();
+
+      final results = <VoiceInputResult>[];
+      final subscription = service.resultStream.listen(results.add);
+
+      stt.ResultHandler? onResult;
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((invocation) async {
+        onResult = invocation.namedArguments[#onResult] as stt.ResultHandler;
+      });
+
+      await service.startListening();
+
+      // Final result with low confidence (should still be emitted)
+      final finalResult = stt.SpeechRecognitionResult(
+        ['Test'],
+        true, // Final
+        null,
+        0,
+        0.6, // Below threshold but final
+        false,
+        false,
+      );
+      onResult?.call(finalResult);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(results.length, equals(1));
+
+      await subscription.cancel();
+    });
+  });
+
+  group('VoiceInputService - Audio Level Monitoring', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should emit normalized audio levels', () async {
+      final audioLevels = <double>[];
+      final subscription = service.audioLevelStream.listen(audioLevels.add);
+
+      void Function(double)? onSoundLevelChange;
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((invocation) async {
+        onSoundLevelChange = invocation.namedArguments[#onSoundLevelChange]
+            as void Function(double)?;
+      });
+
+      await service.startListening();
+
+      // Simulate audio level changes (raw range: -2.0 to 10.0)
+      onSoundLevelChange?.call(-2.0); // Min
+      onSoundLevelChange?.call(4.0);  // Mid
+      onSoundLevelChange?.call(10.0); // Max
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(audioLevels.length, equals(3));
+      expect(audioLevels[0], closeTo(0.0, 0.1)); // Normalized min
+      expect(audioLevels[1], closeTo(0.5, 0.1)); // Normalized mid
+      expect(audioLevels[2], closeTo(1.0, 0.1)); // Normalized max
+
+      await subscription.cancel();
+    });
+
+    test('should clamp audio levels to 0.0-1.0 range', () async {
+      final audioLevels = <double>[];
+      final subscription = service.audioLevelStream.listen(audioLevels.add);
+
+      void Function(double)? onSoundLevelChange;
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((invocation) async {
+        onSoundLevelChange = invocation.namedArguments[#onSoundLevelChange]
+            as void Function(double)?;
+      });
+
+      await service.startListening();
+
+      // Simulate extreme values
+      onSoundLevelChange?.call(-100.0);
+      onSoundLevelChange?.call(100.0);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(audioLevels.every((level) => level >= 0.0 && level <= 1.0), isTrue);
+
+      await subscription.cancel();
+    });
+  });
+
+  group('VoiceInputService - Error Handling', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should handle speech recognition errors', () async {
+      dynamic errorHandler;
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((invocation) async {
+        errorHandler = invocation.namedArguments[#onError];
+        return true;
+      });
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+
+      final results = <VoiceInputResult>[];
+      final subscription = service.resultStream.listen(results.add);
+
+      // Simulate speech error
+      errorHandler?.call('error_audio');
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      expect(service.state, equals(VoiceInputState.error));
+      expect(results.length, equals(1)); // Error result emitted
+      expect(results[0].transcription, isEmpty);
+      expect(results[0].confidence, equals(0.0));
+
+      await subscription.cancel();
+    });
+
+    test('should handle listen start failure', () async {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenThrow(Exception('Microphone busy'));
+
+      expect(
+        () => service.startListening(),
+        throwsA(isA<VoiceInputException>()),
+      );
+      expect(service.state, equals(VoiceInputState.error));
+    });
+  });
+
+  group('VoiceInputService - Configuration', () {
+    test('should use custom language code', () async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+        config: const VoiceInputConfig(languageCode: 'es-ES'),
+      );
+
+      await service.initialize();
+      await service.startListening();
+
+      verify(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: 'es-ES',
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).called(1);
+    });
+
+    test('should respect partial results config', () async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+        config: const VoiceInputConfig(enablePartialResults: false),
+      );
+
+      await service.initialize();
+      await service.startListening();
+
+      verify(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: false,
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).called(1);
+    });
+  });
+
+  group('VoiceInputService - Disposal', () {
+    setUp(() async {
+      when(() => mockSpeech.initialize(
+        onStatus: any(named: 'onStatus'),
+        onError: any(named: 'onError'),
+      )).thenAnswer((_) async => true);
+      when(() => mockSpeech.locales()).thenAnswer((_) async => []);
+
+      service = VoiceInputService(
+        speech: mockSpeech,
+        logger: mockLogger,
+      );
+
+      await service.initialize();
+    });
+
+    test('should cancel listening on dispose', () {
+      when(() => mockSpeech.listen(
+        onResult: any(named: 'onResult'),
+        localeId: any(named: 'localeId'),
+        partialResults: any(named: 'partialResults'),
+        listenFor: any(named: 'listenFor'),
+        pauseFor: any(named: 'pauseFor'),
+        onSoundLevelChange: any(named: 'onSoundLevelChange'),
+      )).thenAnswer((_) async {});
+      when(() => mockSpeech.cancel()).thenAnswer((_) async {});
+
+      service.startListening();
+      service.dispose();
+
+      verify(() => mockSpeech.cancel()).called(1);
+    });
+
+    test('should close all streams on dispose', () async {
+      service.dispose();
+
+      // Streams should be closed
+      expect(service.stateStream.isBroadcast, isTrue);
+      expect(service.resultStream.isBroadcast, isTrue);
+      expect(service.audioLevelStream.isBroadcast, isTrue);
+    });
+  });
+
+  group('VoiceInputResult Model', () {
+    test('should create result with default timestamp', () {
+      final result = VoiceInputResult(
+        transcription: 'Hello',
+        confidence: 0.95,
+        isFinal: true,
+      );
+
+      expect(result.transcription, equals('Hello'));
+      expect(result.confidence, equals(0.95));
+      expect(result.isFinal, isTrue);
+      expect(result.timestamp, isNotNull);
+    });
+
+    test('should format toString correctly', () {
+      final result = VoiceInputResult(
+        transcription: 'Hello world',
+        confidence: 0.85,
+        isFinal: true,
+      );
+
+      final string = result.toString();
+      expect(string, contains('Hello world'));
+      expect(string, contains('85.0%'));
+      expect(string, contains('final: true'));
+    });
+  });
+
+  group('VoiceInputException', () {
+    test('should create exception with message', () {
+      final exception = VoiceInputException('Test error');
+
+      expect(exception.message, equals('Test error'));
+      expect(exception.originalError, isNull);
+      expect(exception.toString(), contains('Test error'));
+    });
+
+    test('should create exception with original error', () {
+      final originalError = Exception('Platform error');
+      final exception = VoiceInputException('Test error', originalError: originalError);
+
+      expect(exception.originalError, equals(originalError));
+    });
+  });
+}

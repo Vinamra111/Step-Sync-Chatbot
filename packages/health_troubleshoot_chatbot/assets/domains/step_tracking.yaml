@@ -1,0 +1,174 @@
+# Step Tracking Domain Configuration
+# This YAML file defines the step tracking domain without writing any Dart code.
+
+domain:
+  id: "step_tracking"
+  name: "Step Tracking"
+  metric_name: "steps"
+  metric_unit: "steps"
+
+branding:
+  assistant_name: "Step Sync Assistant"
+  app_name: "My Fitness App"
+
+# Intent patterns for classification
+intents:
+  - id: "metric_not_syncing"
+    display_name: "Steps Not Syncing"
+    patterns:
+      - "{{metric_name}} not syncing"
+      - "{{metric_name}} aren't updating"
+      - "{{metric_name}} not working"
+      - "my {{metric_name}} stopped tracking"
+    confidence: 0.92
+
+  - id: "wrong_count"
+    display_name: "Wrong Step Count"
+    patterns:
+      - "wrong {{metric_name}}"
+      - "{{metric_name}} count is off"
+      - "incorrect {{metric_name}}"
+      - "{{metric_name}} don't match"
+    confidence: 0.90
+
+  - id: "duplicate_data"
+    display_name: "Duplicate Steps"
+    patterns:
+      - "duplicate {{metric_name}}"
+      - "double counting {{metric_name}}"
+      - "{{metric_name}} counted twice"
+    confidence: 0.88
+
+  - id: "missing_data"
+    display_name: "Missing Steps"
+    patterns:
+      - "missing {{metric_name}}"
+      - "{{metric_name}} disappeared"
+      - "lost my {{metric_name}}"
+    confidence: 0.85
+
+  - id: "permission_issue"
+    display_name: "Permission Issue"
+    patterns:
+      - "permission"
+      - "access denied"
+      - "can't access {{metric_name}}"
+    confidence: 0.93
+
+# Response templates (use placeholders)
+templates:
+  greeting: |
+    Hi! I'm {{assistant_name}}, your personal troubleshooting assistant for {{metric_name}} tracking issues.
+
+    I can help you with:
+    • {{metric_name}} not syncing
+    • Wrong {{metric_name}} count
+    • Duplicate or missing data
+    • Permissions and settings
+
+    What's happening with your {{metric_name}}?
+
+  help: |
+    I can help troubleshoot {{metric_name}} tracking in {{app_name}}!
+
+    Common issues I can fix:
+    ✓ {{metric_name}} not syncing from your device
+    ✓ Wrong {{metric_name}} count
+    ✓ Duplicate {{metric_name}} data
+    ✓ Permission issues
+
+    Just describe what's wrong and I'll guide you through fixing it.
+
+  unknown: |
+    I'm not quite sure what you mean. Are you having trouble with:
+    • {{metric_name}} not syncing?
+    • Wrong {{metric_name}} count?
+    • Something else?
+
+  metric_not_syncing: |
+    I see your {{metric_name}} aren't syncing. Let me check a few things:
+
+    1. **Permissions**: Does {{app_name}} have permission to read {{metric_name}}?
+    2. **Data Source**: Is your fitness tracker connected?
+    3. **Sync**: When did you last see {{metric_name}} update?
+
+    Let me run a diagnostic check for you...
+
+  wrong_count: |
+    Your {{metric_name}} count seems off. This can happen when:
+
+    • Multiple apps are writing {{metric_name}} data
+    • Your primary data source changed
+    • There's duplicate data from different sources
+
+    Let me check which sources are writing {{metric_name}} data...
+
+  duplicate_data: |
+    Duplicate {{metric_name}} can occur when multiple fitness apps write to the same health database.
+
+    To fix this:
+    1. Check which apps have permission to write {{metric_name}}
+    2. Disable {{metric_name}} tracking in apps you don't use
+    3. Set one app as your primary {{metric_name}} source
+
+    Want me to show you which apps are currently tracking {{metric_name}}?
+
+  missing_data: |
+    Missing {{metric_name}} data could mean:
+
+    • Sync hasn't happened yet (can take 15-30 minutes)
+    • Your fitness tracker disconnected
+    • Permissions were revoked
+
+    Let me check the last time your {{metric_name}} synced...
+
+  permission_issue: |
+    It looks like {{app_name}} doesn't have permission to access your {{metric_name}}.
+
+    To fix this:
+    **iOS**: Settings → {{app_name}} → Health → Turn on "{{metric_name}}"
+    **Android**: Settings → Apps → {{app_name}} → Permissions → Physical activity
+
+    Would you like me to open the settings page for you?
+
+  thanks: |
+    You're welcome! Happy to help with your {{metric_name}} tracking.
+
+    Feel free to reach out if you have more questions! 🎯
+
+# Diagnostic issue definitions
+diagnostics:
+  issues:
+    - type: "permissions_not_granted"
+      title: "Permissions Not Granted"
+      description: "{{app_name}} doesn't have permission to read {{metric_name}} from HealthKit/Health Connect."
+      suggested_fix: "Go to Settings → {{app_name}} → Health and enable {{metric_name}} permissions."
+
+    - type: "data_not_syncing"
+      title: "Data Not Syncing"
+      description: "{{metric_name}} data from your device isn't syncing to {{app_name}}."
+      suggested_fix: "Check your internet connection and ensure background app refresh is enabled for {{app_name}}."
+
+    - type: "wrong_data_source"
+      title: "Wrong Data Source"
+      description: "The selected data source for {{metric_name}} may not be your primary tracker."
+      suggested_fix: "Go to Settings → Data Sources and select your preferred {{metric_name}} tracker."
+
+    - type: "conflicting_data_sources"
+      title: "Conflicting Data Sources"
+      description: "Multiple apps are writing conflicting {{metric_name}} data."
+      suggested_fix: "Disable {{metric_name}} tracking in apps you don't actively use."
+
+    - type: "duplicate_data"
+      title: "Duplicate {{metric_name}}"
+      description: "{{metric_name}} are being counted multiple times from different sources."
+      suggested_fix: "Set one app as your primary {{metric_name}} source and disable others."
+
+# Optional: Custom LLM prompt additions
+llm:
+  system_prompt_addition: |
+    STEP TRACKING CONTEXT:
+    - Average person walks 3,000-10,000 steps per day
+    - Fitness trackers sync every 15-30 minutes
+    - Multiple apps can cause duplicate step counts
+    - HealthKit (iOS) and Health Connect (Android) are the health data platforms

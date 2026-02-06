@@ -1,0 +1,95 @@
+# Water Tracking Domain Configuration
+# Example of using the same chatbot for water intake tracking
+
+domain:
+  id: "water_tracking"
+  name: "Water Intake Tracking"
+  metric_name: "water intake"
+  metric_unit: "oz"
+
+branding:
+  assistant_name: "Hydration Helper"
+  app_name: "My Hydration App"
+
+intents:
+  - id: "metric_not_syncing"
+    display_name: "Water Not Syncing"
+    patterns:
+      - "{{metric_name}} not syncing"
+      - "{{metric_name}} not updating"
+      - "water not tracking"
+    confidence: 0.92
+
+  - id: "wrong_count"
+    display_name: "Wrong Water Amount"
+    patterns:
+      - "wrong {{metric_name}}"
+      - "{{metric_name}} is incorrect"
+    confidence: 0.90
+
+  - id: "how_much_should_i_drink"
+    display_name: "Daily Water Goal"
+    patterns:
+      - "how much water should I drink"
+      - "daily water goal"
+      - "recommended {{metric_name}}"
+    confidence: 0.95
+
+templates:
+  greeting: |
+    Hi! I'm {{assistant_name}} 💧
+
+    I help you track and troubleshoot {{metric_name}} in {{app_name}}.
+
+    What can I help you with today?
+
+  help: |
+    I can help with {{metric_name}} tracking:
+
+    ✓ Syncing issues
+    ✓ Incorrect {{metric_name}} amounts
+    ✓ Daily hydration goals
+    ✓ Data from multiple apps
+
+    What do you need help with?
+
+  metric_not_syncing: |
+    Your {{metric_name}} isn't syncing? Let me check:
+
+    1. Did you manually log water in another app?
+    2. Is {{app_name}} connected to your health app?
+    3. When did you last see {{metric_name}} update?
+
+  how_much_should_i_drink: |
+    Great question! Daily {{metric_name}} recommendations:
+
+    • General adult: 64 oz (8 glasses) per day
+    • Active individuals: 80-100 oz per day
+    • Hot weather: Add 16-32 oz
+
+    Your body needs more water when:
+    • Exercising
+    • In hot/humid weather
+    • Pregnant or breastfeeding
+
+    Want me to help you set a personalized goal?
+
+diagnostics:
+  issues:
+    - type: "permissions_not_granted"
+      title: "Permissions Not Granted"
+      description: "{{app_name}} can't access {{metric_name}} data."
+      suggested_fix: "Enable nutrition permissions in Health settings."
+
+    - type: "data_not_syncing"
+      title: "Water Data Not Syncing"
+      description: "Manual water entries aren't syncing to {{app_name}}."
+      suggested_fix: "Check that {{app_name}} has write permissions for nutrition data."
+
+llm:
+  system_prompt_addition: |
+    HYDRATION TRACKING CONTEXT:
+    - Recommended daily intake: 64 oz (8 glasses) for average adult
+    - Increase intake during exercise, hot weather, illness
+    - Dark urine indicates dehydration
+    - Water intake includes water, tea, coffee, water-rich foods

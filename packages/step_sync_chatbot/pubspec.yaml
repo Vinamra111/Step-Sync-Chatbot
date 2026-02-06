@@ -1,0 +1,78 @@
+name: step_sync_chatbot
+description: An intelligent troubleshooting chatbot for step syncing issues across iOS and Android health platforms.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+
+  # Data Models
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.8.1
+
+  # Local Storage
+  sqflite: ^2.3.0
+  sqflite_sqlcipher: ^2.1.1  # Encrypted SQLite for HIPAA compliance
+  flutter_secure_storage: ^9.0.0  # Secure key storage
+  path_provider: ^2.1.1
+  path: ^1.8.3
+
+  # Logging
+  logger: ^2.0.2
+
+  # Platform Detection
+  device_info_plus: ^9.1.1
+
+  # URL Launcher (for opening settings)
+  url_launcher: ^6.2.2
+
+  # HTTP Client (for LLM API calls)
+  http: ^1.1.0
+
+  # LangChain for LLM Integration (compatible with Dart 3.3.4)
+  langchain: 0.7.0
+  langchain_openai: 0.7.0
+
+  # Google Gemini API (Free LLM alternative)
+  google_generative_ai: ^0.4.0
+
+  # Thread Safety
+  synchronized: ^3.1.0
+
+  # Voice Input (Speech-to-Text)
+  speech_to_text: ^6.6.0
+  permission_handler: ^11.0.1
+
+  # Network Connectivity (for Offline Mode)
+  connectivity_plus: ^5.0.2
+
+  # Health Data Integration
+  health_sync_flutter:
+    path: ../../../SDK_StandardizingHealthDataV0/packages/flutter/health_sync_flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.1
+
+  # Code Generation
+  build_runner: ^2.4.7
+  freezed: ^2.4.6
+  json_serializable: ^6.7.1
+
+  # Testing
+  mockito: ^5.4.4
+  mocktail: ^1.0.2
+  test: ^1.24.9
+  sqflite_common_ffi: ^2.3.0
+
+flutter:
+  uses-material-design: true
